@@ -103,11 +103,12 @@ namespace RotoItemGenerator
             if ((Type == ItemType.MagicWeapon) || (Type == ItemType.MeleeWeapon) || (Type == ItemType.RangedWeapon)) {
                 DPS = (random.NextDouble() + AtkSpd * HitChance) * Damage;
                 Protection = 0;
+                PurchaseCost = (Level * DPS + Level * StatMod) * 100;
             } else {
                 Protection = random.Next(1, 4) * Level;
                 DPS = 0;
+                PurchaseCost = (Level * Protection + Level * StatMod) * 100;
             }
-            PurchaseCost = (Level * DPS + Level * StatMod) * 100;
             SellCost = PurchaseCost * random.Next(2, 5) / 10;
 
             double stattest = random.NextDouble();
@@ -192,14 +193,6 @@ namespace RotoItemGenerator
             Protection = 0;
 
             try {
-                /*
-                Console.Write("HP? ");
-                int newhp = Convert.ToInt32(Console.ReadLine());
-                HP = newhp;
-                Console.Write("Mana? ");
-                int newmana = Convert.ToInt32(Console.ReadLine());
-                Mana = newmana;
-                */
                 Console.Write("Strength? ");
                 int newstrength = Convert.ToInt32(Console.ReadLine());
                 Strength = newstrength;
@@ -287,13 +280,13 @@ namespace RotoItemGenerator
             Console.ReadKey();
 
             while (true) {
-                Console.WriteLine("\nPress W to generate a weapon.");
-                Console.WriteLine("Press P to generate a sample player.");
+                Console.WriteLine("\nPress I to generate an item.");
+                Console.WriteLine("Press P to generate a player.");
                 Console.WriteLine("Press B to generate a player battle.");
+                Console.WriteLine("Press V to view a player.");
                 Console.WriteLine("Press E to exit the program.");
                 char c = Console.ReadKey().KeyChar;
-                if (c == 'w' || c == 'W')
-                {
+                if (c == 'i' || c == 'I') {
                     string formatString = "\nResult: {0}, Level {1}, {2:N2} DPS, {3} Protection, X{4} {5} Boost, costs {6:N2}, sells at {7:N2}";
                     Item sample = new Item();
                     Console.Write(String.Format(formatString, sample.Name, sample.Level, sample.DPS, sample.Protection,
@@ -303,8 +296,7 @@ namespace RotoItemGenerator
                     if (c == 'y' || c == 'Y') { continue; }
                     else if (c == 'n' || c == 'N') { break; }
                 }
-                else if (c == 'p' || c == 'P')
-                {
+                else if (c == 'p' || c == 'P') {
                     Player samplep = new Player();
                     if (samplep.isCreated) {
                         players.Add(samplep);
@@ -316,15 +308,31 @@ namespace RotoItemGenerator
                     if (c == 'y' || c == 'Y') { continue; }
                     else if (c == 'n' || c == 'N') { break; }
                 }
-                else if (c == 'b' || c == 'B')
-                {
+                else if (c == 'v' || c == 'V') {
+                    try {
+                        Console.Write("Enter the index number: ");
+                        int newindex = Convert.ToInt32(Console.ReadLine());
+
+                        Player printp = players[newindex];
+                        printp.PrintPlayer();
+                    } catch (ArgumentOutOfRangeException) {
+                        Console.Write("\nERROR: Index out of range.");
+                    } catch (FormatException) {
+                        Console.Write("\nERROR: Integers ONLY.");
+                    }
+                    Console.WriteLine("\nCONTINUE? Y/N ");
+                    c = Console.ReadKey().KeyChar;
+                    if (c == 'y' || c == 'Y') { continue; }
+                    else if (c == 'n' || c == 'N') { break; }
+                }
+                else if (c == 'b' || c == 'B') {
                     try
                     {
                         if (players.Count < 2) { Console.Write("\nERROR: Need more than two players."); }
                         else {
-                            Console.Write("ID for Player 1? ");
+                            Console.Write("\nID for Player 1? ");
                             int p1 = Convert.ToInt32(Console.ReadLine());
-                            Console.Write("ID for Player 2? ");
+                            Console.Write("\nID for Player 2? ");
                             int p2 = Convert.ToInt32(Console.ReadLine());
 
                             if ((p1 < 0) || (p2 < 0)) { Console.Write("\nERROR: ID must be non-negative."); }
@@ -379,170 +387,482 @@ namespace RotoItemGenerator
         private static void BattleSim(Player player1, Player player2)
         {
             Random random = new Random();
+
             int turnnum = 0;
             double HP1 = player1.HP;
             double HP2 = player2.HP;
-            Tuple<double, double> HPMeter;
+            double Mana1 = player1.Mana;
+            double Mana2 = player2.Mana;
+            double TotalMana1 = Mana1;
+            double TotalMana2 = Mana2;
 
-            while (true) {
+            Tuple<double, double, double, double> HPMeter;
+
+            while (true)
+            {
                 turnnum++;
                 Console.WriteLine("Turn " + turnnum);
 
                 // Get two items at random, one for each player.
                 int p1itemindex = random.Next(player1.items.Count);
                 int p2itemindex = random.Next(player2.items.Count);
+                double p1hitchance;
+                double p2hitchance;
+                Item p1item;
+                Item p2item;
+
+                if (p1itemindex == 0)
+                {
+                    p1item = null;
+                    p1hitchance = .5;
+                }
+                else
+                {
+                    p1item = player1.items[p1itemindex];
+                    p1hitchance = p1item.HitChance / p1item.AtkSpd;
+                }
+                if (p2itemindex == 0)
+                {
+                    p2item = null;
+                    p2hitchance = .5;
+                }
+                else
+                {
+                    p2item = player2.items[p2itemindex];
+                    p2hitchance = p2item.HitChance / player2.items[p1itemindex].AtkSpd;
+                }
+
+                // Determine if each item is a weapon.
+                try
+                {
+                    if (!p1item.IsWeapon() && !player2.items[p1itemindex].IsWeapon())
+                    {
+                        // Player 1 goes first, then Player 2.
+
+                        HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                        HP1 = HPMeter.Item1;
+                        HP2 = HPMeter.Item2;
+                        Mana1 = HPMeter.Item3;
+                        Mana2 = HPMeter.Item4;
+                        //turnlist = HPMeter.Item5;
+                    }
+                    else if (!p1item.IsWeapon() && player2.items[p1itemindex].IsWeapon())
+                    {
+                        // Determine player order.
+
+                        if ((p1hitchance / p1item.AtkSpd > p2hitchance / p2item.AtkSpd))
+                        {
+                            if (player1.Agility > player2.Agility)
+                            {
+                                HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else if (player1.Agility < player2.Agility)
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                        }
+                        else if ((p1hitchance / p1item.AtkSpd < p2hitchance / p2item.AtkSpd))
+                        {
+                            if (player1.Agility < player2.Agility)
+                            {
+                                HPMeter = PlayerHitDefinite(player2, player1, p2itemindex, p1itemindex, HP2, HP1, Mana2, Mana1, TotalMana2, TotalMana1, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else if (player1.Agility > player2.Agility)
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                        }
+                        else
+                        {
+                            HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                    }
+                    else if (p1item.IsWeapon() && !player2.items[p1itemindex].IsWeapon())
+                    {
+                        // Determine player order.
+
+                        if ((p1hitchance / p1item.AtkSpd > p2hitchance / p2item.AtkSpd))
+                        {
+                            if (player1.Agility > player2.Agility)
+                            {
+                                HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else if (player1.Agility < player2.Agility)
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                        }
+                        else if ((p1hitchance / p1item.AtkSpd < p2hitchance / p2item.AtkSpd))
+                        {
+                            if (player1.Agility < player2.Agility)
+                            {
+                                HPMeter = PlayerHitDefinite(player2, player1, p2itemindex, p1itemindex, HP2, HP1, Mana2, Mana1, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else if (player1.Agility > player2.Agility)
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                            else
+                            {
+                                HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                                HP1 = HPMeter.Item1;
+                                HP2 = HPMeter.Item2;
+                                Mana1 = HPMeter.Item3;
+                                Mana2 = HPMeter.Item4;
+                                //turnlist = HPMeter.Item5;
+                            }
+                        }
+                        else
+                        {
+                            HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                    }
+                    else
+                    {
+                        // Determine player order.
+
+                        if ((p1hitchance / p1item.AtkSpd > p2hitchance / p2item.AtkSpd) && player1.Agility > player2.Agility)
+                        {
+                            HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                        else if ((p1hitchance / p1item.AtkSpd > p2hitchance / p2item.AtkSpd) && player1.Agility < player2.Agility)
+                        {
+                            HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                        else if ((p1hitchance / p1item.AtkSpd < p2hitchance / p2item.AtkSpd) && player1.Agility < player2.Agility)
+                        {
+                            HPMeter = PlayerHitDefinite(player2, player1, p2itemindex, p1itemindex, HP2, HP1, Mana2, Mana1, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                        else if ((p1hitchance / p1item.AtkSpd < p2hitchance / p2item.AtkSpd) && player1.Agility > player2.Agility)
+                        {
+                            HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                        else
+                        {
+                            HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                            HP1 = HPMeter.Item1;
+                            HP2 = HPMeter.Item2;
+                            Mana1 = HPMeter.Item3;
+                            Mana2 = HPMeter.Item4;
+                            //turnlist = HPMeter.Item5;
+                        }
+                    }
+                } catch (ArgumentOutOfRangeException) {
+                    HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                    HP1 = HPMeter.Item1;
+                    HP2 = HPMeter.Item2;
+                    Mana1 = HPMeter.Item3;
+                    Mana2 = HPMeter.Item4;
+                    //turnlist = HPMeter.Item5;
+                } catch (NullReferenceException) {
+                    if (player1.Agility > player2.Agility)
+                    {
+                        HPMeter = PlayerHitDefinite(player1, player2, 0, 0, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                        HP1 = HPMeter.Item1;
+                        HP2 = HPMeter.Item2;
+                        Mana1 = HPMeter.Item3;
+                        Mana2 = HPMeter.Item4;
+                        //turnlist = HPMeter.Item5;
+                    }
+                    else if (player1.Agility < player2.Agility)
+                    {
+                        HPMeter = PlayerHitDefinite(player2, player1, 0, 0, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                        HP1 = HPMeter.Item1;
+                        HP2 = HPMeter.Item2;
+                        Mana1 = HPMeter.Item3;
+                        Mana2 = HPMeter.Item4;
+                        //turnlist = HPMeter.Item5;
+                    }
+                    else
+                    {
+                        HPMeter = PlayerHitRandom(player1, player2, 0, 0, HP1, HP2, Mana1, Mana2, TotalMana1, TotalMana2, random);
+                        HP1 = HPMeter.Item1;
+                        HP2 = HPMeter.Item2;
+                        Mana1 = HPMeter.Item3;
+                        Mana2 = HPMeter.Item4;
+                        ////turnlist = HPMeter.Item5;
+                    }
+                }
+
+                Console.WriteLine("          " + player1.name + " now at " + HP1 + " HP and " + Mana1 + " Mana");
+                Console.WriteLine("          " + player2.name + " now at " + HP2 + " HP and " + Mana2 + " Mana");
+
+                if (HP1 <= 0)
+                {
+                    Console.WriteLine("PLAYER " + player2.name + " WINS");
+                    break;
+                }
+                else if (HP2 <= 0)
+                {
+                    Console.WriteLine("PLAYER " + player1.name + " WINS");
+                    break;
+                }
+                if (turnnum >= 100)
+                {
+                    break;
+                }
+            }
+
+        }
+
+        private static Tuple<double, double, double, double> PlayerHitDefinite(Player player1, Player player2, int p1itemindex, int p2itemindex,
+            double HP1, double HP2, double Mana1, double Mana2, double TotalMana1, double TotalMana2, Random random) {
+
+            double damage;
+
+            try {
+                if (random.NextDouble() >= (1 - player1.items[p1itemindex].HitChance)) {
+                    Mana1 = Mana1 - TotalMana1 * 0.01 * player1.items[p1itemindex].DPS / (100 * player1.Intellect);
+                    if (Mana1 <= 0) {
+                        damage = player1.Strength / player2.Protection;
+                        HP2 = HP2 - damage;
+                    } else {
+                        damage = player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection);
+                        HP2 = HP2 - damage;
+                    }
+                    Console.WriteLine("          Player " + player1.name + " strikes " + player2.name + " for " + damage + " Damage!");
+                    //HP2 = HP2 - player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection);
+                    if (HP2 <= 0) {
+                        return Tuple.Create(HP1, 0.0, Mana1, Mana2);
+                    }
+                }
+
+                if (random.NextDouble() >= (1 - player2.items[p2itemindex].HitChance)) {
+                    Mana2 = Mana2 - TotalMana2 * 0.01 * player2.items[p2itemindex].DPS / (100 * player2.Intellect);
+                    if (Mana2 <= 0) {
+                        damage = player2.Strength / player1.Protection;
+                        HP1 = HP1 - damage;
+                    } else {
+                        damage = player2.Strength * (1 + player2.items[p1itemindex].DPS / player1.Protection);
+                        HP1 = HP1 - damage;
+                    }
+                    Console.WriteLine("          Player " + player2.name + " strikes " + player1.name + " for " + damage + " Damage!");
+                    if (HP1 <= 0) {
+                        return Tuple.Create(0.0, HP2, Mana1, Mana2);
+                    }
+                }
+            } catch (ArgumentOutOfRangeException)
+            {
+                if (random.NextDouble() > .5) {
+                    damage = player1.Strength;
+                    HP2 = HP2 - damage;
+                    Console.WriteLine("          Player " + player1.name + " strikes " + player2.name + " for " + damage + " Damage!");
+
+                    if (HP2 <= 0) {
+                        return Tuple.Create(HP1, 0.0, Mana1, Mana2);
+                    }
+                } else {
+                    Console.WriteLine("          Player " + player1.name + " misses!");
+                }
+                if (random.NextDouble() > .5) {
+                    damage = player2.Strength;
+                    HP1 = HP1 - damage;
+                    Console.WriteLine("          Player " + player2.name + " strikes " + player1.name + " for " + damage + " Damage!");
+
+                    if (HP1 <= 0) {
+                        return Tuple.Create(0.0, HP2, Mana1, Mana2);
+                    }
+                } else {
+                    Console.WriteLine("          Player " + player2.name + " misses!");
+                }
+            }
+            return Tuple.Create(HP1, HP2, Mana1, Mana2);
+        }
+
+
+        private static Tuple<double, double, double, double> PlayerHitRandom(Player player1, Player player2, int p1itemindex, int p2itemindex,
+            double HP1, double HP2, double Mana1, double Mana2, double TotalMana1, double TotalMana2, Random random) {
+            double damage;
+            // First, determine hit chance for each player.
+
+            try {
                 double p1hitchance = player1.items[p1itemindex].HitChance / player1.items[p1itemindex].AtkSpd;
                 double p2hitchance = player2.items[p2itemindex].HitChance / player2.items[p1itemindex].AtkSpd;
 
-                // Determine if each item is a weapon.
-                if (!player1.items[p1itemindex].IsWeapon() && !player2.items[p1itemindex].IsWeapon()) {
-                    // Player 1 goes first, then Player 2.
+                if (p1hitchance >= p2hitchance) {
+                    //Determine likelihood of each hit.
+                    if (random.NextDouble() >= (1 - player1.items[p1itemindex].HitChance)) {
+                        Mana1 = Mana1 - TotalMana1 * 0.01 * player1.items[p1itemindex].DPS / (100 * player1.Intellect);
+                        if (Mana1 <= 0) {
+                            damage = player1.Strength / player2.Protection;
+                            HP2 = HP2 - damage;
+                        } else {
+                            damage = player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection);
+                            HP2 = HP2 - damage;
+                        }
+                        Console.WriteLine("          Player " + player1.name + " strikes " + player2.name + " for " + damage + " Damage!");
 
-                    PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                } else if (!player1.items[p1itemindex].IsWeapon() && player2.items[p1itemindex].IsWeapon()){
-                    // Determine player order.
-
-                    if ((p1hitchance / player1.items[p1itemindex].AtkSpd > p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility > player2.Agility) {
-                        HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else if ((p1hitchance / player1.items[p1itemindex].AtkSpd > p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility < player2.Agility) {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
+                        if (HP2 <= 0) {
+                            return Tuple.Create(HP1, 0.0, Mana1, Mana2);
+                        }
                     }
-
-                    if ((p1hitchance / player1.items[p1itemindex].AtkSpd < p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility < player2.Agility) {
-                        HPMeter = PlayerHitDefinite(player2, player1, p2itemindex, p1itemindex, HP2, HP1, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else if ((p1hitchance / player1.items[p1itemindex].AtkSpd < p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility > player2.Agility) {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
+                    if (random.NextDouble() >= (1 - player2.items[p2itemindex].HitChance)) {
+                        Mana2 = Mana2 - TotalMana2 * 0.01 * player2.items[p2itemindex].DPS / (100 * player2.Intellect);
+                        if (Mana2 <= 0) {
+                            damage = player2.Strength / player1.Protection;
+                            HP1 = HP1 - damage;
+                        } else {
+                            damage = player2.Strength * (1 + player2.items[p1itemindex].DPS / player1.Protection);
+                            HP1 = HP1 - damage;
+                        }
+                        Console.WriteLine("          Player " + player2.name + " strikes " + player1.name + " for " + damage + " Damage!");
+                        if (HP1 <= 0) {
+                            return Tuple.Create(0.0, HP2, Mana1, Mana2);
+                        }
                     }
-                } else if (player1.items[p1itemindex].IsWeapon() && !player2.items[p1itemindex].IsWeapon()) {
-                    // Determine player order.
-
-                    if ((p1hitchance / player1.items[p1itemindex].AtkSpd > p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility > player2.Agility) {
-                        HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else if ((p1hitchance / player1.items[p1itemindex].AtkSpd > p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility < player2.Agility) {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
+                } else {
+                    //Determine likelihood of each hit.
+                    if (random.NextDouble() >= (1 - player2.items[p2itemindex].HitChance)) {
+                        Mana1 = Mana1 - TotalMana1 * 0.01 * player1.items[p1itemindex].DPS / (100 * player1.Intellect);
+                        if (Mana1 <= 0) {
+                            damage = player1.Strength / player2.Protection;
+                            HP2 = HP2 - damage;
+                        } else {
+                            damage = player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection);
+                            HP2 = HP2 - damage;
+                        }
+                        Console.WriteLine("          Player " + player1.name + " strikes " + player2.name + " for " + damage + " Damage!");
+                        if (HP2 <= 0) {
+                            return Tuple.Create(HP1, 0.0, Mana1, Mana2);
+                        }
                     }
-
-                    if ((p1hitchance / player1.items[p1itemindex].AtkSpd < p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility < player2.Agility) {
-                        HPMeter = PlayerHitDefinite(player2, player1, p2itemindex, p1itemindex, HP2, HP1, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else if ((p1hitchance / player1.items[p1itemindex].AtkSpd < p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility > player2.Agility) {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    } else {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
+                    if (random.NextDouble() >= (1 - player1.items[p1itemindex].HitChance)) {
+                        Mana2 = Mana2 - TotalMana2 * 0.01 * player2.items[p2itemindex].DPS / (100 * player2.Intellect);
+                        if (Mana2 <= 0) {
+                            damage = player2.Strength / player1.Protection;
+                            HP1 = HP1 - damage;
+                        } else {
+                            damage = player2.Strength * (1 + player2.items[p1itemindex].DPS / player1.Protection);
+                            HP1 = HP1 - damage;
+                        }
+                        Console.WriteLine("          Player " + player2.name + " strikes " + player1.name + " for " + damage + " Damage!");
+                        if (HP1 <= 0) {
+                            return Tuple.Create(0.0, HP2, Mana1, Mana2);
+                        }
                     }
                 }
-                else {
-                    // Determine player order.
+            } catch (ArgumentOutOfRangeException) {
+                if (random.NextDouble() > .5) {
+                    damage = player1.Strength;
+                    HP2 = HP2 - damage;
+                    Console.WriteLine("          Player " + player1.name + " strikes " + player2.name + " for " + damage + " Damage!");
 
-                    if ((p1hitchance / player1.items[p1itemindex].AtkSpd > p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility > player2.Agility) {
-                        HPMeter = PlayerHitDefinite(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
+                    if (HP2 <= 0) {
+                        return Tuple.Create(HP1, 0.0, Mana1, Mana2);
                     }
-                    else if ((p1hitchance / player1.items[p1itemindex].AtkSpd > p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility < player2.Agility) {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    }
-                    else if ((p1hitchance / player1.items[p1itemindex].AtkSpd < p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility < player2.Agility) {
-                        HPMeter = PlayerHitDefinite(player2, player1, p2itemindex, p1itemindex, HP2, HP1, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    }
-                    else if ((p1hitchance / player1.items[p1itemindex].AtkSpd < p2hitchance / player2.items[p2itemindex].AtkSpd) && player1.Agility > player2.Agility) {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    }
-                    else {
-                        HPMeter = PlayerHitRandom(player1, player2, p1itemindex, p2itemindex, HP1, HP2, random);
-                        HP1 = HPMeter.Item1;
-                        HP2 = HPMeter.Item2;
-                    }
-                    
+                } else {
+                    Console.WriteLine("          Player " + player1.name + " misses!");
                 }
+                if (random.NextDouble() > .5) {
+                    damage = player2.Strength;
+                    HP1 = HP1 - damage;
+                    Console.WriteLine("          Player " + player2.name + " strikes " + player1.name + " for " + damage + " Damage!");
 
-                Console.WriteLine("          HP 1: " + HP1);
-                Console.WriteLine("          HP 2: " + HP2);
-
-                //TO DO: Determine whether HP for each player is down to zero.
-                if (HP1 <= 0) {
-                    Console.WriteLine(player2.name + " WINS");
-                    break;
-                } else if (HP2 <= 0) {
-                    Console.WriteLine(player1.name + " WINS");
-                    break;
-                }
-                if (turnnum >= 100) {
-                    break;
+                    if (HP1 <= 0) {
+                        return Tuple.Create(0.0, HP2, Mana1, Mana2);
+                    }
+                } else {
+                    Console.WriteLine("          Player " + player2.name + " misses!");
                 }
             }
-
-        }
-
-        private static Tuple<double, double> PlayerHitDefinite(Player player1, Player player2, int p1itemindex, int p2itemindex, double HP1, double HP2, Random random)
-        {
-            if (random.NextDouble() >= (1 - player1.items[p1itemindex].HitChance)) { HP2 = HP2 - player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection); }
-            if (random.NextDouble() >= (1 - player2.items[p2itemindex].HitChance)) { HP1 = HP1 - player2.Strength * (1 + player2.items[p1itemindex].DPS / player1.Protection); }
-
-            //Console.WriteLine("          HP 1: " + HP1);
-            //Console.WriteLine("          HP 2: " + HP2);
-
-            return Tuple.Create(HP1, HP2);
-        }
-
-        private static Tuple<double, double> PlayerHitRandom(Player player1, Player player2, int p1itemindex, int p2itemindex, double HP1, double HP2, Random random)
-        {
-            // First, determine hit chance for each player.
-            double p1hitchance = player1.items[p1itemindex].HitChance / player1.items[p1itemindex].AtkSpd;
-            double p2hitchance = player2.items[p2itemindex].HitChance / player2.items[p1itemindex].AtkSpd;
-
-            if (p1hitchance >= p2hitchance)
-            {
-                //Determine likelihood of each hit.
-                if (random.NextDouble() >= (1 - player1.items[p1itemindex].HitChance)) { HP2 = HP2 - player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection); }
-                if (random.NextDouble() >= (1 - player2.items[p2itemindex].HitChance)) { HP1 = HP1 - player2.Strength * (1 + player2.items[p1itemindex].DPS / player1.Protection); }
-            }
-            else
-            {
-                //Determine likelihood of each hit.
-                if (random.NextDouble() >= (1 - player2.items[p2itemindex].HitChance)) { HP1 = HP1 - player2.Strength * (1 + player2.items[p1itemindex].DPS / player1.Protection); }
-                if (random.NextDouble() >= (1 - player1.items[p1itemindex].HitChance)) { HP2 = HP2 - player1.Strength * (1 + player1.items[p1itemindex].DPS / player2.Protection); }
-            }
-            
-            //Console.WriteLine("          HP 1: " + HP1);
-            //Console.WriteLine("          HP 2: " + HP2);
-
-            return Tuple.Create(HP1, HP2);
+            return Tuple.Create(HP1, HP2, Mana1, Mana2);
         }
     }
 }
